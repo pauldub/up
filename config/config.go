@@ -29,6 +29,7 @@ type validator interface {
 // Config for the project.
 type Config struct {
 	Name        string         `json:"name"`
+	Platform    string         `json:"platform"`
 	Description string         `json:"description"`
 	Type        string         `json:"type"`
 	Headers     header.Rules   `json:"headers"`
@@ -39,6 +40,8 @@ type Config struct {
 	Profile     string         `json:"profile"`
 	Inject      inject.Rules   `json:"inject"`
 	Lambda      Lambda         `json:"lambda"`
+	Docker      Docker         `json:"docker"`
+	Kubernetes  Kubernetes     `json:"kubernetes"`
 	CORS        *CORS          `json:"cors"`
 	ErrorPages  ErrorPages     `json:"error_pages"`
 	Proxy       Relay          `json:"proxy"`
@@ -56,6 +59,10 @@ func (c *Config) Validate() error {
 
 	if err := validate.Name(c.Name); err != nil {
 		return errors.Wrapf(err, ".name %q", c.Name)
+	}
+
+	if err := validate.RequiredString(c.Platform); err != nil {
+		return errors.Wrap(err, ".platform")
 	}
 
 	if err := validate.List(c.Type, []string{"static", "server"}); err != nil {
@@ -80,6 +87,14 @@ func (c *Config) Validate() error {
 
 	if err := c.Lambda.Validate(); err != nil {
 		return errors.Wrap(err, ".lambda")
+	}
+
+	if err := c.Docker.Validate(); err != nil {
+		return errors.Wrap(err, ".docker")
+	}
+
+	if err := c.Kubernetes.Validate(); err != nil {
+		return errors.Wrap(err, ".kubernetes")
 	}
 
 	if err := c.Proxy.Validate(); err != nil {
@@ -108,6 +123,10 @@ func (c *Config) Default() error {
 	// allowing runtime inference to default values.
 	if err := c.Stages.Default(); err != nil {
 		return errors.Wrap(err, ".stages")
+	}
+
+	if c.Platform == "" {
+		c.Platform = "lambda"
 	}
 
 	// TODO: hack, move to the instantiation of aws clients
@@ -146,6 +165,16 @@ func (c *Config) Default() error {
 	// default .lambda
 	if err := c.Lambda.Default(); err != nil {
 		return errors.Wrap(err, ".lambda")
+	}
+
+	// default .docker
+	if err := c.Docker.Default(c.Name); err != nil {
+		return errors.Wrap(err, ".docker")
+	}
+
+	// default .kubernetes
+	if err := c.Kubernetes.Default(); err != nil {
+		return errors.Wrap(err, ".kubernetes")
 	}
 
 	// default .dns

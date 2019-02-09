@@ -51,6 +51,13 @@ type Deploy struct {
 	Build  bool
 }
 
+type PlatformKind string
+
+const (
+	PlatformLambda     = "lambda"
+	PlatformKubernetes = "kubernetes"
+)
+
 // Platform is the interface for platform integration,
 // defining the basic set of functionality required for
 // Up applications.

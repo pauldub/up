@@ -10,13 +10,15 @@ import (
 	"path/filepath"
 	"sort"
 
-	"github.com/mitchellh/go-homedir"
+	homedir "github.com/mitchellh/go-homedir"
 	"github.com/tj/go/term"
 	"github.com/tj/survey"
 
+	"github.com/apex/up"
 	"github.com/apex/up/internal/util"
 	"github.com/apex/up/internal/validate"
 	"github.com/apex/up/platform/aws/regions"
+	"github.com/apex/up/platform/kubernetes/kubeconfig"
 )
 
 // ErrNoCredentials is the error returned when no AWS credential profiles are available.
@@ -24,9 +26,16 @@ var ErrNoCredentials = errors.New("no credentials")
 
 // config saved to up.json
 type config struct {
-	Name    string   `json:"name"`
-	Profile string   `json:"profile"`
-	Regions []string `json:"regions"`
+	Name     string `json:"name"`
+	Platform string `json:"platform"`
+	Docker   struct {
+		Dockerfile string `json:"dockerfile"`
+	} `json:"docker,omitempty"`
+	Kubernetes struct {
+		KubeContext string `json:"kube_context"`
+	} `json:"kubernetes,omitempty"`
+	Profile string   `json:"profile,omitempty"`
+	Regions []string `json:"regions,omitempty"`
 }
 
 // questions for the user.
@@ -35,10 +44,21 @@ var questions = []*survey.Question{
 		Name: "name",
 		Prompt: &survey.Input{
 			Message: "Project name:",
-			Default: defaultName(),
-		},
-		Validate: validateName,
+			Default: defaultName()}, Validate: validateName,
 	},
+	{
+		Name: "platform",
+		Prompt: &survey.Select{
+			Message:  "Platform:",
+			Options:  platforms(),
+			Default:  os.Getenv("PLATFORM"),
+			PageSize: 10,
+		},
+		Validate: survey.Required,
+	},
+}
+
+var awsQuestions = []*survey.Question{
 	{
 		Name: "profile",
 		Prompt: &survey.Select{
@@ -61,12 +81,42 @@ var questions = []*survey.Question{
 	},
 }
 
+var kubernetesQuestions = []*survey.Question{
+	{
+		Name: "dockerfile",
+		Prompt: &survey.Input{
+			Message: "Dockerfile: ",
+			Default: "Dockerfile",
+		},
+		Validate: survey.Required,
+	},
+	{
+		Name: "kube_context",
+		Prompt: &survey.Select{
+			Message:  "Kubectl context: ",
+			Options:  kubeContexts(),
+			Default:  defaultKubeContext(),
+			PageSize: 15,
+		},
+		Validate: survey.Required,
+	},
+}
+
 // Create an up.json file for the user.
 func Create() error {
 	var in struct {
-		Name    string `json:"name"`
+		Name     string `json:"name"`
+		Platform string `json:"platform"`
+	}
+
+	var awsIn struct {
 		Profile string `json:"profile"`
 		Region  string `json:"region"`
+	}
+
+	var kubernetesIn struct {
+		KubeContext string `json:"kube_context" survey:"kube_context"`
+		Dockerfile  string `json:"dockerfile"`
 	}
 
 	if len(awsProfiles()) == 0 {
@@ -98,11 +148,27 @@ func Create() error {
 	}
 
 	c := config{
-		Name:    in.Name,
-		Profile: in.Profile,
-		Regions: []string{
-			regions.GetIdByName(in.Region),
-		},
+		Name:     in.Name,
+		Platform: in.Platform,
+	}
+
+	switch in.Platform {
+	case up.PlatformLambda:
+		if err := survey.Ask(awsQuestions, &awsIn); err != nil {
+			return err
+		}
+
+		c.Profile = awsIn.Profile
+		c.Regions = []string{
+			regions.GetIdByName(awsIn.Region),
+		}
+	case up.PlatformKubernetes:
+		if err := survey.Ask(kubernetesQuestions, &kubernetesIn); err != nil {
+			return err
+		}
+
+		c.Docker.Dockerfile = kubernetesIn.Dockerfile
+		c.Kubernetes.KubeContext = kubernetesIn.KubeContext
 	}
 
 	b, _ := json.MarshalIndent(c, "", "  ")
@@ -162,4 +228,34 @@ func awsProfiles() []string {
 
 	sort.Strings(s)
 	return s
+}
+
+func platforms() []string {
+	return []string{
+		up.PlatformLambda, up.PlatformKubernetes,
+	}
+}
+
+func kubeContexts() []string {
+	config, err := kubeconfig.LoadFile("~/.kube/config")
+	if err != nil {
+		return []string{}
+	}
+
+	contexts := make([]string, 0)
+	for _, ctx := range config.Contexts {
+		contexts = append(contexts, ctx.Name)
+	}
+
+	return contexts
+}
+
+func defaultKubeContext() string {
+	envContext := os.Getenv("KUBE_CONTEXT")
+	if envContext != "" {
+		return envContext
+	}
+
+	contexts := kubeContexts()
+	return contexts[0]
 }

@@ -4,11 +4,12 @@ package parser
 
 import (
 	"fmt"
-	"github.com/apex/up/internal/logs/parser/ast"
 	"io"
 	"os"
 	"sort"
 	"strconv"
+
+	"github.com/apex/up/internal/logs/parser/ast"
 )
 
 const endSymbol rune = 1114112

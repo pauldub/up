@@ -23,9 +23,14 @@ require (
 	github.com/denormal/go-gitignore v0.0.0-20170315120618-40de3d33f668 // indirect
 	github.com/dsnet/compress v0.0.0-20171208185109-cc9eb1d7ad76 // indirect
 	github.com/dustin/go-humanize v0.0.0-20171012181109-77ed807830b4
+	github.com/ericchiang/k8s v1.2.0
 	github.com/facebookgo/freeport v0.0.0-20150612182905-d4adf43b75b9
 	github.com/fanyang01/radix v0.0.0-20160415095728-e1747dd9eeac
 	github.com/fatih/color v1.7.0 // indirect
+	github.com/ghodss/yaml v1.0.0
+	github.com/go-ini/ini v1.30.3 // indirect
+	github.com/golang/protobuf v1.2.0 // indirect
+	github.com/golang/snappy v0.0.0-20180518054509-2e65f85255db // indirect
 	github.com/golang/sync v0.0.0-20170927054112-8e0aa688b654
 	github.com/google/go-github v14.0.0+incompatible // indirect
 	github.com/google/go-querystring v0.0.0-20170111101155-53e6ce116135 // indirect
@@ -42,12 +47,18 @@ require (
 	github.com/mattn/go-colorable v0.0.9 // indirect
 	github.com/mattn/go-isatty v0.0.3 // indirect
 	github.com/mgutz/ansi v0.0.0-20170206155736-9520e82c474b // indirect
+	github.com/mholt/archiver v3.1.1+incompatible
+	github.com/minio/minio-go v6.0.14+incompatible
 	github.com/mitchellh/go-homedir v0.0.0-20161203194507-b8bc1bf76747
+	github.com/nwaples/rardecode v1.0.0 // indirect
 	github.com/pascaldekloe/name v0.0.0-20170812100307-81013e77fe79
+	github.com/pierrec/lz4 v2.0.5+incompatible // indirect
 	github.com/pkg/browser v0.0.0-20170505125900-c90ca0c84f15
 	github.com/pkg/errors v0.8.1
 	github.com/pmezard/go-difflib v1.0.0 // indirect
 	github.com/rs/cors v0.0.0-20180726230524-02026070ea74
+	github.com/rs/xid v1.2.1
+	github.com/sanity-io/litter v1.1.0
 	github.com/segmentio/analytics-go v0.0.0-20160426181448-2d840d861c32 // indirect
 	github.com/segmentio/backo-go v0.0.0-20160424052352-204274ad699c // indirect
 	github.com/segmentio/go-snakecase v1.0.0
@@ -68,9 +79,13 @@ require (
 	github.com/tj/kingpin v2.5.0+incompatible
 	github.com/tj/survey v2.0.6+incompatible
 	github.com/ulikunitz/xz v0.5.4 // indirect
+	github.com/xi2/xz v0.0.0-20171230120015-48954b6210f8 // indirect
 	github.com/xtgo/uuid v0.0.0-20140804021211-a0b114877d4c // indirect
-	golang.org/x/net v0.0.0-20171027103834-c73622c77280
+	golang.org/x/crypto v0.0.0-20190208162236-193df9c0f06f // indirect
+	golang.org/x/net v0.0.0-20190206173232-65e2d4e15006
 	golang.org/x/sync v0.0.0-20180314180146-1d60e4601c6f // indirect
-	golang.org/x/sys v0.0.0-20171031081856-95c657629925 // indirect
+	golang.org/x/sys v0.0.0-20190204203706-41f3e6584952 // indirect
 	golang.org/x/text v0.0.0-20171102192421-88f656faf3f3 // indirect
+	gopkg.in/ini.v1 v1.38.2 // indirect
+	gopkg.in/yaml.v2 v2.2.2 // indirect
 )

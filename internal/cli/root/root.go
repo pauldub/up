@@ -1,6 +1,7 @@
 package root
 
 import (
+	"fmt"
 	"os"
 	"runtime"
 
@@ -13,6 +14,7 @@ import (
 	"github.com/apex/up"
 	"github.com/apex/up/internal/util"
 	"github.com/apex/up/platform/event"
+	"github.com/apex/up/platform/kubernetes"
 	"github.com/apex/up/platform/lambda"
 	"github.com/apex/up/reporter"
 )
@@ -62,8 +64,23 @@ func init() {
 				c.Regions = []string{*region}
 			}
 
-			events := make(event.Events)
-			p := up.New(c, events).WithPlatform(lambda.New(c, events))
+			var (
+				platform up.Platform
+				events   = make(event.Events)
+			)
+
+			switch c.Platform {
+			case up.PlatformLambda:
+				platform = lambda.New(c, events)
+			case up.PlatformKubernetes:
+				platform = kubernetes.New(c, events)
+			default:
+				return nil, nil, errors.Wrap(
+					err, fmt.Sprintf("invalid platform: %s", c.Platform),
+				)
+			}
+
+			p := up.New(c, events).WithPlatform(platform)
 
 			switch {
 			case *verbose:
