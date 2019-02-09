@@ -28,9 +28,6 @@ var ErrNoCredentials = errors.New("no credentials")
 type config struct {
 	Name     string `json:"name"`
 	Platform string `json:"platform"`
-	Docker   struct {
-		Dockerfile string `json:"dockerfile"`
-	} `json:"docker,omitempty"`
 	Kubernetes struct {
 		KubeContext string `json:"kube_context"`
 	} `json:"kubernetes,omitempty"`
@@ -83,14 +80,6 @@ var awsQuestions = []*survey.Question{
 
 var kubernetesQuestions = []*survey.Question{
 	{
-		Name: "dockerfile",
-		Prompt: &survey.Input{
-			Message: "Dockerfile: ",
-			Default: "Dockerfile",
-		},
-		Validate: survey.Required,
-	},
-	{
 		Name: "kube_context",
 		Prompt: &survey.Select{
 			Message:  "Kubectl context: ",
@@ -116,7 +105,6 @@ func Create() error {
 
 	var kubernetesIn struct {
 		KubeContext string `json:"kube_context" survey:"kube_context"`
-		Dockerfile  string `json:"dockerfile"`
 	}
 
 	if len(awsProfiles()) == 0 {
@@ -167,7 +155,6 @@ func Create() error {
 			return err
 		}
 
-		c.Docker.Dockerfile = kubernetesIn.Dockerfile
 		c.Kubernetes.KubeContext = kubernetesIn.KubeContext
 	}
 

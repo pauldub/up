@@ -6,6 +6,7 @@ import (
 	"fmt"
 
 	"github.com/apex/up"
+	"github.com/apex/up/platform/event"
 	"github.com/ericchiang/k8s"
 	corev1 "github.com/ericchiang/k8s/apis/core/v1"
 	metav1 "github.com/ericchiang/k8s/apis/meta/v1"
@@ -23,6 +24,7 @@ type Stack interface {
 	K8s() *k8s.Client
 	Storage() *minio.Client
 	Config() *up.Config
+	Events() event.Events
 }
 
 type KubernetesStack struct {
@@ -30,15 +32,17 @@ type KubernetesStack struct {
 	config  *up.Config
 	k8s     *k8s.Client
 	storage *minio.Client
+	events  event.Events
 }
 
 func New(
-	name string, config *up.Config,
+	name string, config *up.Config, events event.Events,
 	k8sClient *k8s.Client, storage *minio.Client,
 ) *KubernetesStack {
 	return &KubernetesStack{
 		Name:    name,
 		config:  config,
+		events:  events,
 		k8s:     k8sClient,
 		storage: storage,
 	}
@@ -60,6 +64,10 @@ func (s *KubernetesStack) Config() *up.Config {
 	return s.config
 }
 
+func (s *KubernetesStack) Events() event.Events {
+	return s.events
+}
+
 func (s *KubernetesStack) Create(
 	ctx context.Context,
 ) error {
@@ -79,7 +87,7 @@ func (s *KubernetesStack) Create(
 	}
 namespaceExists:
 
-	if s.config.Docker.Registry.Password != "" {
+	if s.config.Kubernetes.Registry.Password != "" {
 		err = s.createDockerRegistrySecret(ctx)
 		if err != nil {
 			return errors.Wrap(err, "create registry secret")
@@ -97,29 +105,29 @@ namespaceExists:
 func (s *KubernetesStack) createDockerRegistrySecret(
 	ctx context.Context,
 ) error {
-	docker := s.config.Docker
+	registry := s.config.Kubernetes.Registry
 
 	registryAuth := base64.StdEncoding.EncodeToString(
 		[]byte(
 			fmt.Sprintf("%s:%s",
-				docker.Registry.Username,
-				docker.Registry.Password,
+				registry.Username,
+				registry.Password,
 			),
 		),
 	)
 
 	dockercfg := fmt.Sprintf(
 		`{"%s":{"username":"%s","password":"%s","email":"%s","auth":"%s"}}`,
-		docker.Registry.URL,
-		docker.Registry.Username,
-		docker.Registry.Password,
-		docker.Registry.Email,
+		registry.URL,
+		registry.Username,
+		registry.Password,
+		registry.Email,
 		registryAuth,
 	)
 
 	dockerConfig := fmt.Sprintf(
 		`{"auths":{"%s":{"auth":"%s"}}}`,
-		docker.Registry.URL, registryAuth,
+		registry.URL, registryAuth,
 	)
 
 	var secret corev1.Secret
@@ -197,4 +205,5 @@ s3 =
 	}
 
 	return errors.WithStack(p.k8s.Update(ctx, &secret))
-}*/
+}
+*/

@@ -40,7 +40,6 @@ type Config struct {
 	Profile     string         `json:"profile"`
 	Inject      inject.Rules   `json:"inject"`
 	Lambda      Lambda         `json:"lambda"`
-	Docker      Docker         `json:"docker"`
 	Kubernetes  Kubernetes     `json:"kubernetes"`
 	CORS        *CORS          `json:"cors"`
 	ErrorPages  ErrorPages     `json:"error_pages"`
@@ -87,10 +86,6 @@ func (c *Config) Validate() error {
 
 	if err := c.Lambda.Validate(); err != nil {
 		return errors.Wrap(err, ".lambda")
-	}
-
-	if err := c.Docker.Validate(); err != nil {
-		return errors.Wrap(err, ".docker")
 	}
 
 	if err := c.Kubernetes.Validate(); err != nil {
@@ -165,11 +160,6 @@ func (c *Config) Default() error {
 	// default .lambda
 	if err := c.Lambda.Default(); err != nil {
 		return errors.Wrap(err, ".lambda")
-	}
-
-	// default .docker
-	if err := c.Docker.Default(c.Name); err != nil {
-		return errors.Wrap(err, ".docker")
 	}
 
 	// default .kubernetes

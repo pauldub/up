@@ -4,8 +4,10 @@ import (
 	"context"
 	"fmt"
 	"io"
+	"time"
 
 	"github.com/apex/up"
+	"github.com/apex/up/platform/event"
 	"github.com/apex/up/platform/kubernetes/stack"
 	"github.com/ericchiang/k8s"
 	corev1 "github.com/ericchiang/k8s/apis/core/v1"
@@ -24,6 +26,7 @@ type Build struct {
 	k8s     *k8s.Client
 	storage *minio.Client
 	config  *up.Config
+	events  event.Events
 }
 
 func New(
@@ -37,6 +40,7 @@ func New(
 		k8s:     stack.K8s(),
 		storage: stack.Storage(),
 		config:  stack.Config(),
+		events:  stack.Events(),
 	}
 }
 
@@ -89,7 +93,6 @@ func (b *Build) pod(
 	buildTarballURL string,
 ) *corev1.Pod {
 	var (
-		docker     = b.config.Docker
 		kubernetes = b.config.Kubernetes
 		storage    = kubernetes.Storage
 	)
@@ -136,9 +139,10 @@ func (b *Build) pod(
 					Name:  k8s.String(b.podName()),
 					Image: k8s.String("gcr.io/kaniko-project/executor:latest"),
 					Args: []string{
-						fmt.Sprintf("--dockerfile=%s", docker.Dockerfile),
+						// fmt.Sprintf("--dockerfile=%s", docker.Dockerfile),
+						fmt.Sprintf("--dockerfile=%s", "Dockerfile.up"),
 						"--context=dir:///build/context",
-						fmt.Sprintf("--destination=%s", b.kanikoDestination(docker.Registry.URL, docker.Registry.Image)),
+						fmt.Sprintf("--destination=%s", b.kanikoDestination(kubernetes.Registry.URL, kubernetes.Registry.Image)),
 					},
 					Env: []*corev1.EnvVar{
 						&corev1.EnvVar{
@@ -182,15 +186,27 @@ func (b *Build) pod(
 }
 
 func (b *Build) Run(ctx context.Context) error {
+	start := time.Now()
+
 	buildTarballURL, err := b.upload()
 	if err != nil {
 		return errors.Wrap(err, "upload context")
 	}
+	b.events.Emit("log", event.Fields{
+		"message":  "upload complete",
+		"duration": time.Since(start),
+	})
+	start = time.Now()
 
 	pod := b.pod(buildTarballURL)
 	if err := b.k8s.Create(ctx, pod); err != nil {
 		return errors.Wrap(err, "create pod")
 	}
+	b.events.Emit("log", event.Fields{
+		"message":  "pod start complete",
+		"duration": time.Since(start),
+	})
+	start = time.Now()
 
 	label := &k8s.LabelSelector{}
 	label.Eq("up-build-id", b.ID)
@@ -211,6 +227,11 @@ func (b *Build) Run(ctx context.Context) error {
 			return errors.Wrap(err, "watch next")
 		}
 
+		if *pod.Status.Phase == "Failed" {
+			watcher.Close()
+			return errors.New("build failed")
+		}
+
 		if *pod.Status.Phase == "Succeeded" {
 			b.k8s.Delete(ctx, pod)
 			watcher.Close()
@@ -218,5 +239,11 @@ func (b *Build) Run(ctx context.Context) error {
 		}
 	}
 
+	b.events.Emit("log", event.Fields{
+		"message":  "pod watch complete",
+		"duration": time.Since(start),
+	})
+
 	return nil
 }
+

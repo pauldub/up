@@ -6,10 +6,12 @@ import (
 	"fmt"
 	"io"
 	"io/ioutil"
+	"os"
 	"time"
 
+	"github.com/apex/log"
 	"github.com/apex/up"
-
+	"github.com/apex/up/internal/proxy/bin"
 	"github.com/apex/up/internal/targz"
 	"github.com/apex/up/platform/event"
 	"github.com/apex/up/platform/kubernetes/build"
@@ -68,7 +70,9 @@ func (p *Platform) Init(stage string) error {
 
 	p.k8s = k8sClient
 	p.storage = minioClient
-	p.stack = stack.New(p.projectNamespace(), p.config, p.k8s, p.storage)
+	p.stack = stack.New(
+		p.projectNamespace(), p.config, p.events, p.k8s, p.storage,
+	)
 
 	return nil
 }
@@ -76,6 +80,15 @@ func (p *Platform) Init(stage string) error {
 func (p *Platform) Build() error {
 	start := time.Now()
 	p.tarball = new(bytes.Buffer)
+
+	if err := p.injectProxy(); err != nil {
+		return errors.Wrap(err, "injecting proxy")
+	}
+	defer p.removeProxy()
+
+	p.events.Emit("log", event.Fields{
+		"message": "build start",
+	})
 
 	r, stats, err := targz.Build(".")
 	if err != nil {
@@ -90,11 +103,22 @@ func (p *Platform) Build() error {
 		return errors.Wrap(err, "closing")
 	}
 
+	tarballSize := p.tarball.Len()
+
+	p.events.Emit("log", event.Fields{
+		"message":  "tarball complete",
+		"duration": time.Since(start),
+	})
+
 	ctx := context.Background()
 
 	if err := p.stack.Create(ctx); err != nil {
 		return errors.Wrap(err, "create stack")
 	}
+
+	p.events.Emit("log", event.Fields{
+		"message": "stack complete",
+	})
 
 	p.build = build.New(p.stage, ioutil.NopCloser(p.tarball), p.stack)
 	if err := p.build.Run(ctx); err != nil {
@@ -104,7 +128,7 @@ func (p *Platform) Build() error {
 	p.events.Emit("platform.build.zip", event.Fields{
 		"files":             stats.FilesAdded,
 		"size_uncompressed": stats.SizeUncompressed,
-		"size_compressed":   p.tarball.Len(),
+		"size_compressed":   tarballSize,
 		"duration":          time.Since(start),
 	})
 
@@ -167,3 +191,36 @@ func (p *Platform) ApplyStack(region string) error {
 func (p *Platform) ShowMetrics(region string, stage string, start time.Time) error {
 	panic("not implemented")
 }
+
+const runtimeDockerfile = `
+FROM heroku/heroku:18
+
+ADD . /app
+WORKDIR /app
+
+ENTRYPOINT ['./up-proxy']
+`
+
+// injectProxy injects the Go proxy.
+func (p *Platform) injectProxy() error {
+	log.Debugf("injecting proxy")
+
+	if err := ioutil.WriteFile("up-proxy", bin.MustAsset("up-proxy"), 0777); err != nil {
+		return errors.Wrap(err, "writing up-proxy")
+	}
+
+	if err := ioutil.WriteFile("Dockerfile.up", []byte(runtimeDockerfile), 0655); err != nil {
+		return errors.Wrap(err, "writing up-proxy")
+	}
+
+	return nil
+}
+
+// removeProxy removes the Go proxy.
+func (p *Platform) removeProxy() error {
+	log.Debugf("removing proxy")
+	os.Remove("up-proxy")
+	os.Remove("Dockerfile.up")
+	return nil
+}
+

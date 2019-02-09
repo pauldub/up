@@ -1,6 +1,7 @@
 package main
 
 import (
+	"net/http"
 	"os"
 	"time"
 
@@ -67,5 +68,13 @@ func main() {
 
 	// serve
 	log.WithField("duration", util.MillisecondsSince(start)).Info("initialized")
-	apex.Handle(proxy.NewHandler(h))
+
+	switch c.Platform {
+	case up.PlatformLambda:
+		apex.Handle(proxy.NewHandler(h))
+	case up.PlatformKubernetes:
+		http.ListenAndServe(":8080", h)
+	default:
+		log.Fatalf("unsupported platform %q", c.Platform)
+	}
 }

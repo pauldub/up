@@ -89,6 +89,15 @@ func (r *reporter) log(name, value string) {
 	fmt.Printf("\r     %s %s\n", colors.Purple(name+":"), value)
 }
 
+// log message.
+func (r *reporter) logMessage(value string, d time.Duration) {
+	duration := ""
+	if d > 0 {
+		duration = fmt.Sprintf("(%s)", d.Round(time.Millisecond))
+	}
+
+	fmt.Printf("\r     %s %s %s\n", colors.Purple(">>>>> "), value, colors.Gray(duration))
+}
 // error line.
 func (r *reporter) error(name, value string) {
 	fmt.Printf("\r     %s %s\n", colors.Red(name+":"), value)
@@ -107,6 +116,13 @@ func (r *reporter) Start() {
 			r.spin()
 		case e := <-r.events:
 			switch e.Name {
+			case "log":
+				duration := time.Duration(0)
+				if _, ok := e.Fields["duration"]; ok {
+					duration = e.Duration("duration")
+				}
+
+				r.logMessage(e.String("message"), duration)
 			case "account.login.verify":
 				term.HideCursor()
 				r.pending("verify", "Check your email for a confirmation link")

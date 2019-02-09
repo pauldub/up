@@ -19,6 +19,13 @@ type Kubernetes struct {
 		Bucket    string `json:"bucket"`
 		Location  string `json:"location"`
 	} `json:"storage"`
+	Registry   struct {
+		URL      string `json:"url"`
+		Image    string `json:"image"`
+		Username string `json:"username"`
+		Email    string `json:"email"`
+		Password string `json:"password"`
+	} `json:"registry"`
 }
 
 func (d *Kubernetes) Validate() error {
@@ -74,6 +81,31 @@ func (d *Kubernetes) Default() error {
 
 	if d.KubeConfig == "" {
 		d.KubeConfig = "~/.kube/config"
+	}
+
+	envRegistryURL := os.Getenv("DOCKER_REGISTRY_URL")
+	if envRegistryURL != "" {
+		d.Registry.URL = envRegistryURL
+	}
+
+	envRegistryImage := os.Getenv("DOCKER_REGISTRY_IMAGE")
+	if envRegistryImage != "" {
+		d.Registry.Image = envRegistryImage
+	}
+
+	envRegistryUsername := os.Getenv("DOCKER_REGISTRY_USERNAME")
+	if envRegistryUsername != "" {
+		d.Registry.Username = envRegistryUsername
+	}
+
+	envRegistryEmail := os.Getenv("DOCKER_REGISTRY_EMAIL")
+	if envRegistryEmail != "" {
+		d.Registry.Email = envRegistryEmail
+	}
+
+	envRegistryPassword := os.Getenv("DOCKER_REGISTRY_PASSWORD")
+	if envRegistryPassword != "" {
+		d.Registry.Password = envRegistryPassword
 	}
 
 	return nil
