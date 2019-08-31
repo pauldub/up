@@ -101,7 +101,7 @@ require (
 	gopkg.in/inf.v0 v0.9.1 // indirect
 	gopkg.in/ini.v1 v1.38.2 // indirect
 	k8s.io/api v0.0.0-20190830074751-c43c3e1d5a79
-	k8s.io/apimachinery v0.0.0-20190830114704-564e0900f0fd // indirect
+	k8s.io/apimachinery v0.0.0-20190830114704-564e0900f0fd
 	k8s.io/client-go v12.0.0+incompatible
 	k8s.io/gengo v0.0.0-20190826232639-a874a240740c // indirect
 	k8s.io/kube-openapi v0.0.0-20190816220812-743ec37842bf // indirect

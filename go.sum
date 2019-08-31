@@ -353,6 +353,7 @@ gopkg.in/yaml.v2 v2.2.2/go.mod h1:hI93XBmqTisBFMUTm0b8Fm+jr3Dg1NNxqwp+5A1VGuI=
 k8s.io/api v0.0.0-20190620084959-7cf5895f2711/go.mod h1:TBhBqb1AWbBQbW3XRusr7n7E4v2+5ZY8r8sAMnyFC5A=
 k8s.io/api v0.0.0-20190830074751-c43c3e1d5a79 h1:hLCV3ElxVj2QOSrhv+Sd0ddCD76p9E9W5CJBFd1jIig=
 k8s.io/api v0.0.0-20190830074751-c43c3e1d5a79/go.mod h1:ZPzpiABYnAONRNqslkGU1hppe1VEXgsEJlFRIbP75G8=
+k8s.io/api v0.0.0-20190831074750-7364b6bdad65 h1:J9uZfyjvqkRa9p2Z22vCCraDjq1Dwf/x9wXzPf6fqSk=
 k8s.io/apimachinery v0.0.0-20190612205821-1799e75a0719/go.mod h1:I4A+glKBHiTgiEjQiCCQfCAIcIMFGt291SmsvcrFzJA=
 k8s.io/apimachinery v0.0.0-20190830034626-e709f673dfd9/go.mod h1:OOC7vMsHyCzra5xu6r1bRXkXMH76iww9BeHOAAJof4U=
 k8s.io/apimachinery v0.0.0-20190830114704-564e0900f0fd h1:QjVuqr4citCL+hQAYa8eOA9vCaN3Bkqa2j4j/Na6Loo=

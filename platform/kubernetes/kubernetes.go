@@ -1,11 +1,9 @@
 package kubernetes
 
 import (
-	"bufio"
 	"bytes"
 	"context"
 	"fmt"
-	"io"
 	"strings"
 	"time"
 
@@ -14,14 +12,13 @@ import (
 	"github.com/apex/up/platform/kubernetes/build"
 	"github.com/apex/up/platform/kubernetes/deployment"
 	"github.com/apex/up/platform/kubernetes/kubeconfig"
+	"github.com/apex/up/platform/kubernetes/logs"
 	"github.com/apex/up/platform/kubernetes/stack"
 	"github.com/ericchiang/k8s"
 	corev1 "github.com/ericchiang/k8s/apis/core/v1"
 	minio "github.com/minio/minio-go"
 	"github.com/mitchellh/go-homedir"
 	"github.com/pkg/errors"
-	"github.com/sanity-io/litter"
-	kcorev1 "k8s.io/api/core/v1"
 	"k8s.io/client-go/kubernetes"
 	"k8s.io/client-go/tools/clientcmd"
 )
@@ -159,42 +156,7 @@ func (p *Platform) Deploy(deploy up.Deploy) error {
 }
 
 func (p *Platform) Logs(l up.LogsConfig) up.Logs {
-	litter.Dump(l)
-
-	var (
-		pods corev1.PodList
-	)
-
-	label := &k8s.LabelSelector{}
-	label.Eq("up-project", p.config.Name)
-	label.Eq("up-process", "deploy")
-
-	err := p.stack.K8s().List(context.Background(), p.stack.Namespace(), &pods, label.Selector())
-	if err != nil {
-		return nil
-	}
-
-	readers := make([]io.Reader, 0)
-
-	for _, pod := range pods.Items {
-		req := p.stack.Client().CoreV1().Pods(p.stack.Namespace()).GetLogs(*pod.Metadata.Name, &kcorev1.PodLogOptions{})
-		logs, err := req.Stream()
-
-		if err != nil {
-			return nil
-		}
-		defer logs.Close()
-
-		readers = append(readers, logs)
-	}
-
-	scanner := bufio.NewScanner(io.MultiReader(readers...))
-
-	for scanner.Scan() {
-		fmt.Println(scanner.Text())
-	}
-
-	panic("not implemented")
+	return logs.New(p.stack, l)
 }
 
 func (p *Platform) Domains() up.Domains {
