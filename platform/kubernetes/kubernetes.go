@@ -1,27 +1,27 @@
 package kubernetes
 
 import (
+	"bufio"
 	"bytes"
 	"context"
 	"fmt"
 	"io"
-	"io/ioutil"
-	"os"
 	"time"
 
-	"github.com/apex/log"
 	"github.com/apex/up"
-	"github.com/apex/up/internal/proxy/bin"
-	"github.com/apex/up/internal/targz"
 	"github.com/apex/up/platform/event"
 	"github.com/apex/up/platform/kubernetes/build"
 	"github.com/apex/up/platform/kubernetes/deployment"
 	"github.com/apex/up/platform/kubernetes/kubeconfig"
 	"github.com/apex/up/platform/kubernetes/stack"
 	"github.com/ericchiang/k8s"
+	corev1 "github.com/ericchiang/k8s/apis/core/v1"
 	minio "github.com/minio/minio-go"
 	"github.com/pkg/errors"
 	"github.com/sanity-io/litter"
+	kcorev1 "k8s.io/api/core/v1"
+	"k8s.io/client-go/kubernetes"
+	"k8s.io/client-go/tools/clientcmd"
 )
 
 type Platform struct {
@@ -32,9 +32,7 @@ type Platform struct {
 	build   *build.Build
 	tarball *bytes.Buffer
 
-	stack   *stack.KubernetesStack
-	k8s     *k8s.Client
-	storage *minio.Client
+	stack *stack.KubernetesStack
 }
 
 // New platform.
@@ -58,6 +56,17 @@ func (p *Platform) Init(stage string) error {
 		return errors.Wrap(err, "initialize k8s")
 	}
 
+	// use the current context in kubeconfig
+	clientConfig, err := clientcmd.BuildConfigFromFlags("", p.config.Kubernetes.KubeConfig)
+	if err != nil {
+		panic(err.Error())
+	}
+
+	clientset, err := kubernetes.NewForConfig(clientConfig)
+	if err != nil {
+		return errors.Wrap(err, "initialize kubernetes clientset")
+	}
+
 	minioClient, err := minio.New(
 		p.config.Kubernetes.Storage.Endpoint,
 		p.config.Kubernetes.Storage.AccessKey,
@@ -68,10 +77,8 @@ func (p *Platform) Init(stage string) error {
 		return errors.Wrap(err, "initialize minio")
 	}
 
-	p.k8s = k8sClient
-	p.storage = minioClient
 	p.stack = stack.New(
-		p.projectNamespace(), p.config, p.events, p.k8s, p.storage,
+		p.projectNamespace(), p.config, p.events, k8sClient, clientset, minioClient,
 	)
 
 	return nil
@@ -79,36 +86,6 @@ func (p *Platform) Init(stage string) error {
 
 func (p *Platform) Build() error {
 	start := time.Now()
-	p.tarball = new(bytes.Buffer)
-
-	if err := p.injectProxy(); err != nil {
-		return errors.Wrap(err, "injecting proxy")
-	}
-	defer p.removeProxy()
-
-	p.events.Emit("log", event.Fields{
-		"message": "build start",
-	})
-
-	r, stats, err := targz.Build(".")
-	if err != nil {
-		return errors.Wrap(err, "tag.gz")
-	}
-
-	if _, err := io.Copy(p.tarball, r); err != nil {
-		return errors.Wrap(err, "copying")
-	}
-
-	if err := r.Close(); err != nil {
-		return errors.Wrap(err, "closing")
-	}
-
-	tarballSize := p.tarball.Len()
-
-	p.events.Emit("log", event.Fields{
-		"message":  "tarball complete",
-		"duration": time.Since(start),
-	})
 
 	ctx := context.Background()
 
@@ -116,19 +93,15 @@ func (p *Platform) Build() error {
 		return errors.Wrap(err, "create stack")
 	}
 
-	p.events.Emit("log", event.Fields{
-		"message": "stack complete",
-	})
-
-	p.build = build.New(p.stage, ioutil.NopCloser(p.tarball), p.stack)
+	p.build = build.New(p.stage, p.stack)
 	if err := p.build.Run(ctx); err != nil {
 		return errors.Wrap(err, "build run")
 	}
 
 	p.events.Emit("platform.build.zip", event.Fields{
-		"files":             stats.FilesAdded,
-		"size_uncompressed": stats.SizeUncompressed,
-		"size_compressed":   tarballSize,
+		"files":             p.build.Stats.FilesAdded,
+		"size_uncompressed": p.build.Stats.SizeUncompressed,
+		"size_compressed":   p.build.TarballSize,
 		"duration":          time.Since(start),
 	})
 
@@ -144,15 +117,74 @@ func (p *Platform) projectNamespace() string {
 } */
 
 func (p *Platform) Deploy(deploy up.Deploy) error {
-	litter.Dump(deploy)
-	litter.Dump(p.build)
+	start := time.Now()
 
 	ctx := context.Background()
-	err := deployment.New(p.stack, p.build, p.events, deploy).Deploy(ctx)
-	return errors.Wrap(err, "deployment deploy")
+	err := deployment.New(p.stack, p.build, p.config, p.events, deploy).Deploy(ctx)
+	if err != nil {
+		return errors.Wrap(err, "deployment deploy")
+	}
+
+	fields := event.Fields{
+		"commit": deploy.Commit,
+		"stage":  deploy.Stage,
+	}
+
+	defer func() {
+		fields["duration"] = time.Since(start)
+		fields["commit"] = deploy.Commit
+		fields["version"] = p.build.ID
+		p.events.Emit("platform.deploy.complete", fields)
+	}()
+
+	url, err := p.URL("", deploy.Stage)
+	if err != nil {
+		return errors.Wrap(err, "fetching url")
+	}
+
+	p.events.Emit("platform.deploy.url", event.Fields{
+		"url": url,
+	})
+
+	return nil
 }
 
-func (p *Platform) Logs(up.LogsConfig) up.Logs {
+func (p *Platform) Logs(l up.LogsConfig) up.Logs {
+	litter.Dump(l)
+
+	var (
+		pods corev1.PodList
+	)
+
+	label := &k8s.LabelSelector{}
+	label.Eq("up-project", p.config.Name)
+	label.Eq("up-process", "deploy")
+
+	err := p.stack.K8s().List(context.Background(), p.stack.Namespace(), &pods, label.Selector())
+	if err != nil {
+		return nil
+	}
+
+	readers := make([]io.Reader, 0)
+
+	for _, pod := range pods.Items {
+		req := p.stack.Client().CoreV1().Pods(p.stack.Namespace()).GetLogs(*pod.Metadata.Name, &kcorev1.PodLogOptions{})
+		logs, err := req.Stream()
+
+		if err != nil {
+			return nil
+		}
+		defer logs.Close()
+
+		readers = append(readers, logs)
+	}
+
+	scanner := bufio.NewScanner(io.MultiReader(readers...))
+
+	for scanner.Scan() {
+		fmt.Println(scanner.Text())
+	}
+
 	panic("not implemented")
 }
 
@@ -160,8 +192,17 @@ func (p *Platform) Domains() up.Domains {
 	panic("not implemented")
 }
 
-func (p *Platform) URL(region string, stage string) (string, error) {
-	panic("not implemented")
+func (p *Platform) URL(region, stage string) (string, error) {
+	var (
+		service corev1.Service
+	)
+
+	err := p.stack.K8s().Get(context.Background(), p.stack.Namespace(), p.config.Name, &service)
+	if err != nil {
+		return "", errors.Wrap(err, "URL")
+	}
+
+	return *service.Spec.ClusterIP, nil
 }
 
 func (p *Platform) Exists(region string) (bool, error) {
@@ -191,36 +232,3 @@ func (p *Platform) ApplyStack(region string) error {
 func (p *Platform) ShowMetrics(region string, stage string, start time.Time) error {
 	panic("not implemented")
 }
-
-const runtimeDockerfile = `
-FROM heroku/heroku:18
-
-ADD . /app
-WORKDIR /app
-
-ENTRYPOINT ['./up-proxy']
-`
-
-// injectProxy injects the Go proxy.
-func (p *Platform) injectProxy() error {
-	log.Debugf("injecting proxy")
-
-	if err := ioutil.WriteFile("up-proxy", bin.MustAsset("up-proxy"), 0777); err != nil {
-		return errors.Wrap(err, "writing up-proxy")
-	}
-
-	if err := ioutil.WriteFile("Dockerfile.up", []byte(runtimeDockerfile), 0655); err != nil {
-		return errors.Wrap(err, "writing up-proxy")
-	}
-
-	return nil
-}
-
-// removeProxy removes the Go proxy.
-func (p *Platform) removeProxy() error {
-	log.Debugf("removing proxy")
-	os.Remove("up-proxy")
-	os.Remove("Dockerfile.up")
-	return nil
-}
-

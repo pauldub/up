@@ -12,6 +12,7 @@ import (
 	metav1 "github.com/ericchiang/k8s/apis/meta/v1"
 	minio "github.com/minio/minio-go"
 	"github.com/pkg/errors"
+	"k8s.io/client-go/kubernetes"
 )
 
 const (
@@ -22,29 +23,33 @@ const (
 type Stack interface {
 	Namespace() string
 	K8s() *k8s.Client
+	Client() *kubernetes.Clientset
 	Storage() *minio.Client
 	Config() *up.Config
 	Events() event.Events
 }
 
 type KubernetesStack struct {
-	Name    string
-	config  *up.Config
-	k8s     *k8s.Client
-	storage *minio.Client
-	events  event.Events
+	Name      string
+	config    *up.Config
+	k8s       *k8s.Client
+	clientset *kubernetes.Clientset
+	storage   *minio.Client
+	events    event.Events
 }
 
 func New(
 	name string, config *up.Config, events event.Events,
-	k8sClient *k8s.Client, storage *minio.Client,
+	k8sClient *k8s.Client, clientset *kubernetes.Clientset,
+	storage *minio.Client,
 ) *KubernetesStack {
 	return &KubernetesStack{
-		Name:    name,
-		config:  config,
-		events:  events,
-		k8s:     k8sClient,
-		storage: storage,
+		Name:      name,
+		config:    config,
+		events:    events,
+		k8s:       k8sClient,
+		clientset: clientset,
+		storage:   storage,
 	}
 }
 
@@ -54,6 +59,10 @@ func (s *KubernetesStack) Namespace() string {
 
 func (s *KubernetesStack) K8s() *k8s.Client {
 	return s.k8s
+}
+
+func (s *KubernetesStack) Client() *kubernetes.Clientset {
+	return s.clientset
 }
 
 func (s *KubernetesStack) Storage() *minio.Client {

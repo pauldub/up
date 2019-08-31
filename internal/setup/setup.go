@@ -26,8 +26,8 @@ var ErrNoCredentials = errors.New("no credentials")
 
 // config saved to up.json
 type config struct {
-	Name     string `json:"name"`
-	Platform string `json:"platform"`
+	Name       string `json:"name"`
+	Platform   string `json:"platform"`
 	Kubernetes struct {
 		KubeContext string `json:"kube_context"`
 	} `json:"kubernetes,omitempty"`
@@ -107,10 +107,6 @@ func Create() error {
 		KubeContext string `json:"kube_context" survey:"kube_context"`
 	}
 
-	if len(awsProfiles()) == 0 {
-		return ErrNoCredentials
-	}
-
 	println()
 
 	// confirm
@@ -142,6 +138,10 @@ func Create() error {
 
 	switch in.Platform {
 	case up.PlatformLambda:
+		if len(awsProfiles()) == 0 {
+			return ErrNoCredentials
+		}
+
 		if err := survey.Ask(awsQuestions, &awsIn); err != nil {
 			return err
 		}

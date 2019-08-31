@@ -47,6 +47,10 @@ func init() {
 			return err
 		}
 
+		if err := p.Init(*stage); err != nil {
+			return errors.Wrap(err, "initializing")
+		}
+
 		url, err := p.URL(region, *stage)
 		if err != nil {
 			return err

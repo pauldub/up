@@ -59,9 +59,10 @@ func (s *Stage) Default() error {
 
 // StageOverrides config.
 type StageOverrides struct {
-	Hooks  Hooks  `json:"hooks"`
-	Lambda Lambda `json:"lambda"`
-	Proxy  Relay  `json:"proxy"`
+	Hooks      Hooks      `json:"hooks"`
+	Lambda     Lambda     `json:"lambda"`
+	Proxy      Relay      `json:"proxy"`
+	Kubernetes Kubernetes `json:"kubernetes"`
 }
 
 // Override config.
@@ -69,6 +70,7 @@ func (s *StageOverrides) Override(c *Config) {
 	s.Hooks.Override(c)
 	s.Lambda.Override(c)
 	s.Proxy.Override(c)
+	s.Kubernetes.Override(c)
 }
 
 // Stages config.

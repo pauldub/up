@@ -40,6 +40,7 @@ func init() {
 	follow := cmd.Flag("follow", "Follow or tail the live logs.").Short('f').Bool()
 	since := cmd.Flag("since", "Show logs since duration (30s, 5m, 2h, 1h30m, 3d, 1M).").Short('S').Default("1d").String()
 	expand := cmd.Flag("expand", "Show expanded logs.").Short('e').Bool()
+	stage := cmd.Flag("stage", "Target stage name.").Short('s').Default("staging").String()
 
 	cmd.Action(func(_ *kingpin.ParseContext) error {
 		c, p, err := root.Init()
@@ -58,6 +59,10 @@ func init() {
 
 		if *follow {
 			s = time.Duration(0)
+		}
+
+		if err := p.Init(*stage); err != nil {
+			return errors.Wrap(err, "initializing")
 		}
 
 		q := *query

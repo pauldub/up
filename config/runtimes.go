@@ -21,11 +21,14 @@ const (
 	RuntimeStatic             = "static"
 	RuntimeJavaMaven          = "java maven"
 	RuntimeJavaGradle         = "java gradle"
+	RuntimeHerokuish          = "herokuish"
 )
 
 // inferRuntime returns the runtime based on files present in the CWD.
 func inferRuntime() Runtime {
 	switch {
+	case util.Exists("Procfile"):
+		return RuntimeHerokuish
 	case util.Exists("main.go"):
 		return RuntimeGo
 	case util.Exists("main.cr"):
@@ -52,6 +55,8 @@ func inferRuntime() Runtime {
 // runtimeConfig performs config inferences based on what Up thinks the runtime is.
 func runtimeConfig(runtime Runtime, c *Config) error {
 	switch runtime {
+	case RuntimeHerokuish:
+		herokuish(c)
 	case RuntimeGo:
 		golang(c)
 	case RuntimeClojure:
@@ -72,6 +77,13 @@ func runtimeConfig(runtime Runtime, c *Config) error {
 		}
 	}
 	return nil
+}
+
+// golang config.
+func herokuish(c *Config) {
+	if c.Proxy.Command == "" {
+		c.Proxy.Command = "herokuish procfile start web"
+	}
 }
 
 // golang config.

@@ -19,7 +19,7 @@ type Kubernetes struct {
 		Bucket    string `json:"bucket"`
 		Location  string `json:"location"`
 	} `json:"storage"`
-	Registry   struct {
+	Registry struct {
 		URL      string `json:"url"`
 		Image    string `json:"image"`
 		Username string `json:"username"`
@@ -109,4 +109,59 @@ func (d *Kubernetes) Default() error {
 	}
 
 	return nil
+}
+
+// Override config.
+func (k *Kubernetes) Override(c *Config) {
+	if k.KubeConfig != "" {
+		c.Kubernetes.KubeConfig = k.KubeConfig
+	}
+
+	if k.KubeContext != "" {
+		c.Kubernetes.KubeContext = k.KubeContext
+	}
+
+	if k.Storage.Endpoint != "" {
+		c.Kubernetes.Storage.Endpoint = k.Storage.Endpoint
+	}
+
+	if k.Storage.AccessKey != "" {
+		c.Kubernetes.Storage.AccessKey = k.Storage.AccessKey
+	}
+
+	if k.Storage.SecretKey != "" {
+		c.Kubernetes.Storage.SecretKey = k.Storage.SecretKey
+	}
+
+	if k.Storage.Secure != false {
+		c.Kubernetes.Storage.Secure = k.Storage.Secure
+	}
+
+	if k.Storage.Bucket != "" {
+		c.Kubernetes.Storage.Secure = k.Storage.Secure
+	}
+
+	if k.Storage.Location != "" {
+		c.Kubernetes.Storage.Location = k.Storage.Location
+	}
+
+	if k.Registry.URL != "" {
+		c.Kubernetes.Registry.URL = k.Registry.URL
+	}
+
+	if k.Registry.Image != "" {
+		c.Kubernetes.Registry.Image = k.Registry.Image
+	}
+
+	if k.Registry.Username != "" {
+		c.Kubernetes.Registry.Username = k.Registry.Username
+	}
+
+	if k.Registry.Email != "" {
+		c.Kubernetes.Registry.Email = k.Registry.Email
+	}
+
+	if k.Registry.Password != "" {
+		c.Kubernetes.Registry.Password = k.Registry.Password
+	}
 }

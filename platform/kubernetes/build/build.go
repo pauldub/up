@@ -1,12 +1,17 @@
 package build
 
 import (
+	"bytes"
 	"context"
 	"fmt"
 	"io"
-	"time"
+	"io/ioutil"
+	"os"
 
+	"github.com/apex/log"
 	"github.com/apex/up"
+	"github.com/apex/up/internal/proxy/bin"
+	"github.com/apex/up/internal/targz"
 	"github.com/apex/up/platform/event"
 	"github.com/apex/up/platform/kubernetes/stack"
 	"github.com/ericchiang/k8s"
@@ -15,12 +20,15 @@ import (
 	minio "github.com/minio/minio-go"
 	"github.com/pkg/errors"
 	"github.com/rs/xid"
+	archive "github.com/tj/go-archive"
 )
 
 type Build struct {
-	ID      string
-	Stage   string
-	Tarball io.ReadCloser
+	ID          string
+	Stage       string
+	Tarball     io.ReadCloser
+	TarballSize int
+	Stats       *archive.Stats
 
 	stack   stack.Stack
 	k8s     *k8s.Client
@@ -30,18 +38,45 @@ type Build struct {
 }
 
 func New(
-	stage string, tarball io.ReadCloser, stack stack.Stack,
+	stage string, stack stack.Stack,
 ) *Build {
 	return &Build{
 		ID:      xid.New().String(),
 		Stage:   stage,
-		Tarball: tarball,
 		stack:   stack,
 		k8s:     stack.K8s(),
 		storage: stack.Storage(),
 		config:  stack.Config(),
 		events:  stack.Events(),
 	}
+}
+
+func (b *Build) tarball() (*bytes.Buffer, error) {
+	tarball := new(bytes.Buffer)
+
+	if err := b.injectProxy(); err != nil {
+		return tarball, errors.Wrap(err, "injecting proxy")
+	}
+	defer b.removeProxy()
+
+	r, stats, err := targz.Build(".")
+	if err != nil {
+		return tarball, errors.Wrap(err, "tag.gz")
+	}
+
+	if _, err := io.Copy(tarball, r); err != nil {
+		return tarball, errors.Wrap(err, "copying")
+	}
+
+	if err := r.Close(); err != nil {
+		return tarball, errors.Wrap(err, "closing")
+	}
+
+	b.Stats = stats
+	b.Tarball = ioutil.NopCloser(tarball)
+	b.TarballSize = tarball.Len()
+
+	return tarball, nil
 }
 
 func (b *Build) upload() (string, error) {
@@ -87,6 +122,10 @@ func (b *Build) kanikoDestination(registry, image string) string {
 	return fmt.Sprintf(
 		"%s/%s:%s", registry, image, b.ID,
 	)
+}
+
+func (b *Build) Image(registry, image string) string {
+	return b.kanikoDestination(registry, image)
 }
 
 func (b *Build) pod(
@@ -140,6 +179,7 @@ func (b *Build) pod(
 					Image: k8s.String("gcr.io/kaniko-project/executor:latest"),
 					Args: []string{
 						// fmt.Sprintf("--dockerfile=%s", docker.Dockerfile),
+						"--cache=true",
 						fmt.Sprintf("--dockerfile=%s", "Dockerfile.up"),
 						"--context=dir:///build/context",
 						fmt.Sprintf("--destination=%s", b.kanikoDestination(kubernetes.Registry.URL, kubernetes.Registry.Image)),
@@ -186,27 +226,19 @@ func (b *Build) pod(
 }
 
 func (b *Build) Run(ctx context.Context) error {
-	start := time.Now()
+	if _, err := b.tarball(); err != nil {
+		return errors.Wrap(err, "build tarball")
+	}
 
 	buildTarballURL, err := b.upload()
 	if err != nil {
 		return errors.Wrap(err, "upload context")
 	}
-	b.events.Emit("log", event.Fields{
-		"message":  "upload complete",
-		"duration": time.Since(start),
-	})
-	start = time.Now()
 
 	pod := b.pod(buildTarballURL)
 	if err := b.k8s.Create(ctx, pod); err != nil {
 		return errors.Wrap(err, "create pod")
 	}
-	b.events.Emit("log", event.Fields{
-		"message":  "pod start complete",
-		"duration": time.Since(start),
-	})
-	start = time.Now()
 
 	label := &k8s.LabelSelector{}
 	label.Eq("up-build-id", b.ID)
@@ -228,6 +260,7 @@ func (b *Build) Run(ctx context.Context) error {
 		}
 
 		if *pod.Status.Phase == "Failed" {
+			b.k8s.Delete(ctx, pod)
 			watcher.Close()
 			return errors.New("build failed")
 		}
@@ -239,11 +272,39 @@ func (b *Build) Run(ctx context.Context) error {
 		}
 	}
 
-	b.events.Emit("log", event.Fields{
-		"message":  "pod watch complete",
-		"duration": time.Since(start),
-	})
+	return nil
+}
+
+const runtimeDockerfile = `
+FROM gliderlabs/herokuish:latest
+
+ADD . /app
+WORKDIR /app
+
+RUN herokuish buildpack build
+
+CMD ["/app/up-proxy"]
+`
+
+// injectProxy injects the Go proxy.
+func (b *Build) injectProxy() error {
+	log.Debugf("injecting proxy")
+
+	if err := ioutil.WriteFile("up-proxy", bin.MustAsset("up-proxy"), 0777); err != nil {
+		return errors.Wrap(err, "writing up-proxy")
+	}
+
+	if err := ioutil.WriteFile("Dockerfile.up", []byte(runtimeDockerfile), 0655); err != nil {
+		return errors.Wrap(err, "writing up-proxy")
+	}
 
 	return nil
 }
 
+// removeProxy removes the Go proxy.
+func (b *Build) removeProxy() error {
+	log.Debugf("removing proxy")
+	os.Remove("up-proxy")
+	os.Remove("Dockerfile.up")
+	return nil
+}
