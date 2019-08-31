@@ -6,6 +6,7 @@ import (
 	"context"
 	"fmt"
 	"io"
+	"strings"
 	"time"
 
 	"github.com/apex/up"
@@ -17,6 +18,7 @@ import (
 	"github.com/ericchiang/k8s"
 	corev1 "github.com/ericchiang/k8s/apis/core/v1"
 	minio "github.com/minio/minio-go"
+	"github.com/mitchellh/go-homedir"
 	"github.com/pkg/errors"
 	"github.com/sanity-io/litter"
 	kcorev1 "k8s.io/api/core/v1"
@@ -56,10 +58,15 @@ func (p *Platform) Init(stage string) error {
 		return errors.Wrap(err, "initialize k8s")
 	}
 
-	// use the current context in kubeconfig
-	clientConfig, err := clientcmd.BuildConfigFromFlags("", p.config.Kubernetes.KubeConfig)
+	kubeConfigFile, err := homedir.Expand(p.config.Kubernetes.KubeConfig)
 	if err != nil {
-		panic(err.Error())
+		return err
+	}
+
+	// use the current context in kubeconfig
+	clientConfig, err := clientcmd.BuildConfigFromFlags("", kubeConfigFile)
+	if err != nil {
+		return err
 	}
 
 	clientset, err := kubernetes.NewForConfig(clientConfig)
@@ -68,7 +75,9 @@ func (p *Platform) Init(stage string) error {
 	}
 
 	minioClient, err := minio.New(
-		p.config.Kubernetes.Storage.Endpoint,
+		strings.TrimPrefix(
+			strings.TrimPrefix(p.config.Kubernetes.Storage.Endpoint, "http://"),
+			"https://"),
 		p.config.Kubernetes.Storage.AccessKey,
 		p.config.Kubernetes.Storage.SecretKey,
 		p.config.Kubernetes.Storage.Secure,

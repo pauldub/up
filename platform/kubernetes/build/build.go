@@ -137,13 +137,48 @@ func (b *Build) pod(
 	)
 
 	configureMc := fmt.Sprintf(
-		"mc config host add minio https://%s %s %s",
+		"mc config host add minio %s %s %s",
 		storage.Endpoint, storage.AccessKey, storage.SecretKey,
 	)
 
 	downloadContext := fmt.Sprintf(
 		"mc cp minio/%s /build/context.tar.gz", buildTarballURL,
 	)
+	volumes := []*corev1.Volume{
+		&corev1.Volume{
+			Name: k8s.String("context"),
+			VolumeSource: &corev1.VolumeSource{
+				EmptyDir: &corev1.EmptyDirVolumeSource{
+					Medium: k8s.String(""),
+				},
+			},
+		},
+	}
+
+	if kubernetes.Registry.Password != "" {
+		volumes = append(volumes, &corev1.Volume{
+			Name: k8s.String("docker-config"),
+			VolumeSource: &corev1.VolumeSource{
+				Secret: &corev1.SecretVolumeSource{
+					SecretName: k8s.String(stack.DockerRegistrySecret),
+				},
+			},
+		})
+	}
+
+	volumeMounts := []*corev1.VolumeMount{
+		&corev1.VolumeMount{
+			Name:      k8s.String("context"),
+			MountPath: k8s.String("/build/"),
+		},
+	}
+
+	if kubernetes.Registry.Password != "" {
+		volumeMounts = append(volumeMounts, &corev1.VolumeMount{
+			Name:      k8s.String("docker-config"),
+			MountPath: k8s.String("/kaniko/.docker/"),
+		})
+	}
 
 	return &corev1.Pod{
 		Metadata: &metav1.ObjectMeta{
@@ -190,37 +225,11 @@ func (b *Build) pod(
 							Value: k8s.String("1"),
 						},
 					},
-					VolumeMounts: []*corev1.VolumeMount{
-						&corev1.VolumeMount{
-							Name:      k8s.String("docker-config"),
-							MountPath: k8s.String("/kaniko/.docker/"),
-						},
-						&corev1.VolumeMount{
-							Name:      k8s.String("context"),
-							MountPath: k8s.String("/build/"),
-						},
-					},
+					VolumeMounts: volumeMounts,
 				},
 			},
 			RestartPolicy: k8s.String("Never"),
-			Volumes: []*corev1.Volume{
-				&corev1.Volume{
-					Name: k8s.String("docker-config"),
-					VolumeSource: &corev1.VolumeSource{
-						Secret: &corev1.SecretVolumeSource{
-							SecretName: k8s.String(stack.DockerRegistrySecret),
-						},
-					},
-				},
-				&corev1.Volume{
-					Name: k8s.String("context"),
-					VolumeSource: &corev1.VolumeSource{
-						EmptyDir: &corev1.EmptyDirVolumeSource{
-							Medium: k8s.String(""),
-						},
-					},
-				},
-			},
+			Volumes:       volumes,
 		},
 	}
 }
@@ -260,7 +269,7 @@ func (b *Build) Run(ctx context.Context) error {
 		}
 
 		if *pod.Status.Phase == "Failed" {
-			b.k8s.Delete(ctx, pod)
+			// b.k8s.Delete(ctx, pod)
 			watcher.Close()
 			return errors.New("build failed")
 		}
